@@ -1,10 +1,11 @@
 # CD2-TSI
-
+Here, take Air Quality dataset and Electricity dataset as examples:
 ## File Structure
+
 - Data:
-  - Air Quality dataset: Beijing as source domain, Tianjin as target domain
-  - Electricity dataset: Etth1 as source domain, Etth2 as target domain
-- Code: Code of our implementation
+  - Air Quality dataset: Beijing (source domain) and Tianjin (target domain)
+  - Electricity dataset: Etth1 (source domain) and Etth2 (target domain)
+- Code: Implementation code for our approach
 
 ## Experiments
 
