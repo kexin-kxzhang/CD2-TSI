@@ -1,38 +1,39 @@
 # CD2-TSI
-Here, take Air Quality dataset and Electricity dataset as examples:
+Here, take Hydrology dataset as an example:
 ## File Structure
 
 - Data:
-  - Air Quality dataset: Beijing (source domain) and Tianjin (target domain)
-  - Electricity dataset: Etth1 (source domain) and Etth2 (target domain)
+  - Hydrology dataset: Discharge (source domain) and Pooled (target domain)
 - Code: Implementation code for our approach
 
 ## Experiments
 
 ### training and imputation for the Air Quality dataset
-Run <pre style="background: #f0f0f0; display: inline-block;">bash air_run_da.sh</pre>
+Run <pre style="background: #f0f0f0; display: inline-block;">bash hydrology_run_DA.sh</pre>
 <pre style="background: #f0f0f0; padding: 10px;">
-nohup python main_domain_adaptation.py \
-  --dataset air_quality \
-  --lambda_T 1e-1 \
-  --lambda_C 45e-1 \
-  --freq_interpolation 1 --ratio 2e-1 \
-  --nsample 100 --testmissingratio 1e-1 \
-  --device cuda:0 \
-  --targetstrategy random > ./logs/air_quality/CD2_TSI/targetstrategy_random-mr_1e-1-transfer_1e-1-consistency_45e-1-freq_interpolation-3e-3_2e-1.log 2>&1 &
-wait
-</pre>
+#!/bin/bash
 
-### training and imputation for the Electricity dataset
-Run <pre style="background: #f0f0f0; display: inline-block;">bash etth_run_da.sh</pre>
-<pre style="background: #f0f0f0; padding: 10px;">
+dataset="hydrology"
+miu_align="45e-1"
+taul="2e-1"
+tauh="7e-1"
+freq_interpolation="1"
+mixup_lambda="2e-1"
+nsample="100"
+device="cuda:0"
+train_missing_pattern="block"
+eval_missing_pattern="block"
+
 nohup python main_domain_adaptation.py \
-  --dataset electricity \
-  --miu_using_mse 5 \
-  --miu_using_multi_domain 1e-1 \
-  --freq_interpolation 1 --ratio 4e-1 \
-  --nsample 100 --seed 1 \
-  --targetstrategy block \
-  --missing_pattern block > ./logs/electricity/CD2_TSI/targetstrategy_block-missing_pattern_block-transfer_1e-1-consistency_5-freq_interpolation-3e-3-4e-1.log 2>&1 &
+  --dataset ${dataset} \
+  --miu_align ${miu_align} \
+  --taul ${taul} \
+  --tauh ${tauh} \
+  --freq_interpolation ${freq_interpolation} \
+  --mixup_lambda ${mixup_lambda} \
+  --nsample ${nsample} \
+  --device ${device} \
+  --train_missing_pattern ${train_missing_pattern} \
+  --eval_missing_pattern ${eval_missing_pattern} > ./logs/${dataset}/CD2-TSI-train_missing_pattern_${train_missing_pattern}-eval_missing_pattern_${eval_missing_pattern}-miu_align_${miu_align}-taul_${taul}-tauh_${tauh}-freq_interpolation_${freq_interpolation}-mixup_lambda_${mixup_lambda}.log 2>&1 &
 wait
 </pre>
