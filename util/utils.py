@@ -1,49 +1,14 @@
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch.optim import Adam
 from tqdm import tqdm
 import pickle
 from torch import nn
 import copy
 
-def amp_spectrum_swap(amp_original, amp_auxiliary, L=0.1, ratio=0):
-    
-    a_original = np.fft.fftshift(amp_original, axes=(-2, -1))
-    a_trg = np.fft.fftshift(amp_auxiliary, axes=(-2, -1))
-
-    _, h, w = a_original.shape
-    b = (np.floor(np.amin((h,w))*L)).astype(int)
-    c_h = np.floor(h/2.0).astype(int)
-    c_w = np.floor(w/2.0).astype(int)
-
-    h1 = c_h-b
-    h2 = c_h+b+1
-    w1 = c_w-b
-    w2 = c_w+b+1
-
-    a_original[:,h1:h2,w1:w2] = a_original[:,h1:h2,w1:w2] * ratio + a_trg[:,h1:h2,w1:w2] * (1- ratio)
-    a_original = np.fft.ifftshift( a_original, axes=(-2, -1) )
-    return a_original
-
-def freq_space_interpolation(original_data, auxiliary_data, L=0 , ratio=0):
-    original_data_np = original_data.cpu().detach().numpy() 
-    fft_original_np = np.fft.fft2(original_data_np, axes=(-2, -1))
-
-    amp_original, pha_original = np.abs(fft_original_np), np.angle(fft_original_np)
-
-    auxiliary_data_np = auxiliary_data.cpu().detach().numpy() 
-    fft_auxiliary_np = np.fft.fft2(auxiliary_data_np, axes=(-2, -1))
-
-    amp_auxiliary = np.abs(fft_auxiliary_np)
-
-    amp_original_ = amp_spectrum_swap(amp_original, amp_auxiliary, L=L , ratio=ratio)
-
-    fft_original_ = amp_original_ * np.exp( 1j * pha_original )
-    transformed_data = np.fft.ifft2( fft_original_, axes=(-2, -1) )
-    transformed_data = np.real(transformed_data)
-
-    return transformed_data
-
+from util.FMixup import freq_mixup_interpolation
+from util.DA import discrepancy_alignment_loss    
 
 def train_da(
     src_model,
@@ -55,11 +20,12 @@ def train_da(
     src_valid_loader=None,
     valid_epoch_interval=20,
     foldername="",
-    lambda_T=0,
-    lambda_C=0,
     freq_interpolation=1,
+    mixup_lambda=0.2,
+    miu_align=5,
+    taul=0.2,
+    tauh=0.7,
     device=None,
-    ratio=0.2,
 ):
     src_optimizer = Adam(src_model.parameters(), lr=config["lr"], weight_decay=1e-6)
     tgt_optimizer = Adam(tgt_model.parameters(), lr=config["lr"], weight_decay=1e-6)
@@ -88,35 +54,27 @@ def train_da(
             tqdm(tgt_train_loader, mininterval=5.0, maxinterval=50.0) as tgt_it:
             for src_batch, tgt_batch in zip(src_it, tgt_it):
                 if freq_interpolation==1:
-                    tgt_observed_data = tgt_batch["observed_data"].to(device).float()
-                    src_observed_data = src_batch["observed_data"].to(device).float()
-                    transformed_in_trg = freq_space_interpolation(tgt_observed_data, src_observed_data, L=0.003, ratio=ratio)
-                    tgt_batch["interpolated_data"] = torch.tensor(transformed_in_trg).to(device).float()
-                    transformed_in_src = freq_space_interpolation(src_observed_data, tgt_observed_data, L=0.003, ratio=ratio)
-                    src_batch["interpolated_data"] = torch.tensor(transformed_in_src).to(device).float()
+                    tgt_cond_data = tgt_batch["observed_data"].to(device).float()*tgt_batch["cond_mask"].to(device)
+                    src_cond_data = src_batch["observed_data"].to(device).float()*src_batch["cond_mask"].to(device)
+                    mixup_tgt = freq_mixup_interpolation(tgt_cond_data, src_cond_data, alpha=0.003, ratio=mixup_lambda)
+                    tgt_batch["freq_itp"] = torch.tensor(mixup_tgt).to(device).float()
+                    mixup_src = freq_mixup_interpolation(src_cond_data, tgt_cond_data, alpha=0.003, ratio=mixup_lambda)
+                    src_batch["freq_itp"] = torch.tensor(mixup_src).to(device).float()
 
                 src_optimizer.zero_grad()
                 tgt_optimizer.zero_grad()
 
-                src_mse_loss, src_pred, src_feat, src_masks = src_model(src_batch) 
-                tgt_mse_loss, tgt_pred, tgt_feat, tgt_masks = tgt_model(tgt_batch) 
+                src_loss, src_pred = src_model(src_batch)  
+                tgt_loss, tgt_pred = tgt_model(tgt_batch) 
 
-                total_loss = 1 * src_mse_loss + 1 * tgt_mse_loss
-
-                with torch.no_grad():
-                    src_tgt_mse_loss, src_tgt_pred, src_tgt_feat, src_tgt_masks = src_model(tgt_batch)
-                    
-                    diff_loss = tgt_mse_loss - src_tgt_mse_loss
-                    if diff_loss > 0:
-                        diff_loss = diff_loss
-                    else:
-                        diff_loss = -diff_loss ** 2
-                    total_loss += miu_using_multi_domain * diff_loss
-
-                    auxiliary_mse_loss = torch.nn.functional.mse_loss(src_tgt_pred, tgt_pred)
-                    total_loss += miu_using_mse * auxiliary_mse_loss
-
-                    
+                total_loss = 1 * src_loss + 1 * tgt_loss
+                if miu_align != 0:
+                    with torch.no_grad():
+                        src_model.eval()
+                        _, tgt_pred_from_src_model = src_model(tgt_batch)
+                        l_align = discrepancy_alignment_loss(tgt_pred, tgt_pred_from_src_model, taul, tauh)
+                        total_loss += miu_align * l_align
+ 
                 total_loss.backward()
                 avg_loss += total_loss.item()
                 src_optimizer.step()
@@ -147,12 +105,12 @@ def train_da(
                     tqdm(tgt_valid_loader, mininterval=5.0, maxinterval=50.0) as valid_tgt_it:
                     for valid_src_batch, valid_tgt_batch in zip(valid_src_it, valid_tgt_it):
                         if freq_interpolation==1:
-                            valid_tgt_observed_data = valid_tgt_batch["observed_data"].to(device).float()
-                            valid_src_observed_data = valid_src_batch["observed_data"].to(device).float()
-                            transformed_in_trg = freq_space_interpolation(valid_tgt_observed_data, valid_src_observed_data, L=0.003, ratio=ratio)
-                            valid_tgt_batch["interpolated_data"] = torch.tensor(transformed_in_trg).to(device).float()
+                            valid_tgt_cond_data = valid_tgt_batch["observed_data"].to(device).float()*valid_tgt_batch["cond_mask"].to(device)
+                            valid_src_cond_data = valid_src_batch["observed_data"].to(device).float()*valid_src_batch["cond_mask"].to(device)
+                            valid_mixup_tgt = freq_mixup_interpolation(valid_tgt_cond_data, valid_src_cond_data, alpha=0.003, ratio=mixup_lambda)
+                            valid_tgt_batch["freq_itp"] = torch.tensor(valid_mixup_tgt).to(device).float()
 
-                        loss, _, _, _ = tgt_model(valid_tgt_batch, is_train=0)
+                        loss, _, _, _, _ = tgt_model(valid_tgt_batch, is_train=0)
                         avg_loss_valid += loss.item()
                         tgt_valid_batch_no+=1
                         valid_tgt_it.set_postfix(
@@ -200,6 +158,7 @@ def calc_quantile_CRPS(target, forecast, eval_points, mean_scaler, scaler):
     return CRPS.item() / len(quantiles)
 
 def calc_quantile_CRPS_sum(target, forecast, eval_points, mean_scaler, scaler):
+
     eval_points = eval_points.mean(-1)
     target = target * scaler + mean_scaler
     target = target.sum(-1)
@@ -214,8 +173,8 @@ def calc_quantile_CRPS_sum(target, forecast, eval_points, mean_scaler, scaler):
         CRPS += q_loss / denom
     return CRPS.item() / len(quantiles)
 
-def evaluate_da(model, test_loader, src_test_loader, nsample=100, scaler=1, mean_scaler=0, foldername="", 
-                freq_interpolation=1, device=None, ratio=0.2):
+def evaluate_da(model, tgt_test_loader, src_test_loader, nsample=100, scaler=1, mean_scaler=0, foldername="", 
+                freq_interpolation=1, mixup_lambda=0.2, device=None):
 
     with torch.no_grad():
         model.eval()
@@ -231,19 +190,13 @@ def evaluate_da(model, test_loader, src_test_loader, nsample=100, scaler=1, mean
 
         tgt_test_batch_no = 0
         with tqdm(src_test_loader, mininterval=5.0, maxinterval=50.0) as src_test_it, \
-            tqdm(test_loader, mininterval=5.0, maxinterval=50.0) as tgt_test_it:
+            tqdm(tgt_test_loader, mininterval=5.0, maxinterval=50.0) as tgt_test_it:
             for src_test_batch, tgt_test_batch in zip(src_test_it, tgt_test_it):
-                if freq_interpolation==1:
-                    tgt_observed_data = tgt_test_batch["observed_data"].to(device).float()
-                    src_observed_data = src_test_batch["observed_data"].to(device).float()
-                    transformed_in_trg = freq_space_interpolation(tgt_observed_data, src_observed_data, L=0.003, ratio=ratio)
-                    tgt_test_batch["interpolated_data"] = torch.tensor(transformed_in_trg).to(device).float()
-
                 output = model.evaluate(tgt_test_batch, nsample)
 
                 samples, c_target, eval_points, observed_points, observed_time = output
-                samples = samples.permute(0, 1, 3, 2)  # (B,nsample,L,K)
-                c_target = c_target.permute(0, 2, 1)  # (B,L,K)
+                samples = samples.permute(0, 1, 3, 2)  
+                c_target = c_target.permute(0, 2, 1)  
                 eval_points = eval_points.permute(0, 2, 1)
                 observed_points = observed_points.permute(0, 2, 1)
 
