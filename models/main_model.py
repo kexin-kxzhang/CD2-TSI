@@ -33,11 +33,11 @@ class CD2_TSI_base(nn.Module):
     ):
         loss_sum = 0
         for t in range(self.num_steps):
-            loss, predicted, features = self.calc_loss(
+            loss, predicted = self.calc_loss(
                 observed_data, cond_mask, observed_mask, shared_side_info, specific_side_info, itp_info, is_train, set_t=t
             )
             loss_sum += loss.detach()
-        return loss_sum / self.num_steps, predicted, features
+        return loss_sum / self.num_steps, predicted
 
     def calc_loss(
         self, observed_data, cond_mask, observed_mask, shared_side_info, specific_side_info, itp_info, is_train, set_t=-1
