@@ -110,7 +110,7 @@ def train_da(
                             valid_mixup_tgt = freq_mixup_interpolation(valid_tgt_cond_data, valid_src_cond_data, alpha=0.003, ratio=mixup_lambda)
                             valid_tgt_batch["freq_itp"] = torch.tensor(valid_mixup_tgt).to(device).float()
 
-                        loss, _, _, _, _ = tgt_model(valid_tgt_batch, is_train=0)
+                        loss, _ = tgt_model(valid_tgt_batch, is_train=0)
                         avg_loss_valid += loss.item()
                         tgt_valid_batch_no+=1
                         valid_tgt_it.set_postfix(
