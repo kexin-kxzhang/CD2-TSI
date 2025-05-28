@@ -1,4 +1,8 @@
-# CD2-TSI
+# Cross-Domain Conditional Diffusion Models for Time Series Imputation (ECML-PKDD 2025)
+
+This repository contains the official implementation of our ECML-PKDD 2025 paper CD2-TSI:
+📘: Cross-Domain Conditional Diffusion Models for Time Series Imputation.
+
 Here, take Hydrology dataset as an example:
 ## File Structure
 
