@@ -4,21 +4,21 @@ This repository contains the official implementation of our ECML-PKDD 2025 paper
 
 📘: Cross-Domain Conditional Diffusion Models for Time Series Imputation.
 
-Here, take Hydrology dataset as an example:
+Here, take Electricity dataset as an example:
 ## File Structure
 
 - Data:
-  - Hydrology dataset: Discharge (source domain) and Pooled (target domain)
+  - Electricity dataset: Etth1 (source domain) and Etth2 (target domain)
 - Code: Implementation code for our approach
 
 ## Experiments
 
-### training and imputation for the Air Quality dataset
+### training and imputation for the Electricity dataset
 Run <pre style="background: #f0f0f0; display: inline-block;">bash hydrology_run_DA.sh</pre>
 <pre style="background: #f0f0f0; padding: 10px;">
 #!/bin/bash
 
-dataset="hydrology"
+dataset="electricity"
 miu_align="45e-1"
 taul="2e-1"
 tauh="7e-1"
@@ -26,8 +26,8 @@ freq_interpolation="1"
 mixup_lambda="2e-1"
 nsample="100"
 device="cuda:0"
-train_missing_pattern="block"
-eval_missing_pattern="block"
+train_missing_pattern="point"
+eval_missing_pattern="point"
 
 nohup python main_domain_adaptation.py \
   --dataset ${dataset} \
