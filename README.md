@@ -14,7 +14,7 @@ Here, take Electricity dataset as an example:
 ## Experiments
 
 ### training and imputation for the Electricity dataset
-Run <pre style="background: #f0f0f0; display: inline-block;">bash hydrology_run_DA.sh</pre>
+Run <pre style="background: #f0f0f0; display: inline-block;">bash etth_run_DA.sh</pre>
 <pre style="background: #f0f0f0; padding: 10px;">
 #!/bin/bash
 
