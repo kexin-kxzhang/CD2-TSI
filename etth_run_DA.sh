@@ -1,6 +1,6 @@
 #!/bin/bash
 
-dataset="hydrology"
+dataset="electricity"
 miu_align="45e-1"
 taul="2e-1"
 tauh="7e-1"
@@ -8,8 +8,8 @@ freq_interpolation="1"
 mixup_lambda="2e-1"
 nsample="100"
 device="cuda:0"
-train_missing_pattern="block"
-eval_missing_pattern="block"
+train_missing_pattern="point"
+eval_missing_pattern="point"
 
 nohup python main_domain_adaptation.py \
   --dataset ${dataset} \
