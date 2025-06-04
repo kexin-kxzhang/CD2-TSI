@@ -73,6 +73,7 @@ def sample_mask(shape, p=0.0015, p_noise=0.05, max_seq=1, min_seq=1, rng=None):
     return mask.astype('uint8')
 
 
+
 class ETTh1_Dataset(Dataset):
     def __init__(self, seed=1, eval_length=48, mode="train", val_len=0.1, test_len=0.2, missing_pattern='block', 
                 target_strategy='block'):
