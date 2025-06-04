@@ -11,6 +11,7 @@ device="cuda:0"
 train_missing_pattern="point"
 eval_missing_pattern="point"
 
+
 nohup python main_domain_adaptation.py \
   --dataset ${dataset} \
   --miu_align ${miu_align} \
